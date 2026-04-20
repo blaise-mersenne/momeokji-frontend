@@ -37,9 +37,7 @@ export default function Home() {
   const fetchRestaurants = async () => {
     setIsLoading(true);
     const { data, error } = await supabase.from("restaurants").select("*");
-
     if (error) {
-      console.error("데이터 로딩 에러:", error);
       setIsLoading(false);
       return;
     }
@@ -56,66 +54,72 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 font-sans text-gray-900">
+    // 메인 배경: #D1E9F6 적용
+    <div className="min-h-screen bg-[#D1E9F6] p-4 font-['Pretendard','Noto_Sans_KR',sans-serif]">
       <div className="max-w-md mx-auto">
-        <header className="mb-6 bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-          <h1 className="text-2xl font-bold mb-2">언제 드실 예정인가요?</h1>
-          <p className="text-sm text-gray-500 mb-4">선택하신 시간에 영업 중인 식당만 큐레이션 합니다.</p>
-          <input
-            type="time"
-            value={targetTime}
-            onChange={(e) => setTargetTime(e.target.value)}
-            className="w-full p-3 border border-gray-200 rounded-xl text-lg font-semibold focus:outline-none focus:ring-2 focus:ring-[#FF6B00] transition-colors"
-          />
+        
+        {/* 상단 섹션: 디자인 명세 반영 */}
+        <header className="mb-6 pt-8 pb-4">
+          <h1 className="text-[24px] font-extrabold text-[#495057] leading-tight tracking-[-0.02em] mb-2">
+            오늘의 맞춤 추천
+          </h1>
+          <p className="text-[16px] text-[#495057]/70 font-medium">당신의 취향에 맞춰 선별했어요</p>
+          
+          <div className="mt-6 bg-white/50 backdrop-blur-sm p-4 rounded-[16px] border border-white/20">
+            <label className="text-xs font-bold text-[#495057] mb-2 block uppercase tracking-wider">Target Time</label>
+            <input
+              type="time"
+              value={targetTime}
+              onChange={(e) => setTargetTime(e.target.value)}
+              className="w-full bg-transparent text-[20px] font-bold text-[#495057] focus:outline-none"
+            />
+          </div>
         </header>
 
-        <main>
-          <div className="flex justify-between items-end mb-4 px-1">
-            <h2 className="text-lg font-bold">추천 식당 Top 5</h2>
-            <span className="text-sm text-[#FF6B00] font-medium">{restaurants.length}곳 발견</span>
-          </div>
-
+        {/* 리스트 섹션: Gap 12px 반영 */}
+        <main className="flex flex-col gap-[12px]">
           {isLoading ? (
-            <div className="text-center py-10 text-gray-400">알고리즘 계산 중...</div>
+            <div className="text-center py-20 text-[#495057]/50 font-semibold">큐레이션 엔진 가동 중...</div>
           ) : restaurants.length === 0 ? (
-            <div className="text-center py-10 bg-white rounded-2xl border border-gray-100 text-gray-500 shadow-sm">
-              해당 시간에 영업 중인 식당이 없습니다.<br/>시간을 변경해 보세요.
-            </div>
+            <div className="text-center py-20 bg-white/30 rounded-[16px] text-[#495057]/50">조건에 맞는 식당이 없습니다.</div>
           ) : (
-            <div className="flex flex-col gap-4">
-              {restaurants.map((place, index) => (
-                <div key={place.id || index} className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100">
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="text-xl font-bold">{place.name}</h3>
-                    <span className="bg-[#FF6B00]/10 text-[#FF6B00] text-xs font-bold px-2 py-1 rounded-md">
-                      매칭 {place.base_score}%
-                    </span>
+            restaurants.map((place) => (
+              // 식당 카드: Radius 16px, Shadow 0 10px 20px rgba(0,0,0,0.05) 반영
+              <div key={place.id} className="bg-white p-5 rounded-[16px] shadow-[0_10px_20px_rgba(0,0,0,0.05)] border border-white/10 flex flex-col gap-3">
+                <div className="flex justify-between items-start">
+                  <div className="flex flex-col">
+                    <h3 className="text-[18px] font-bold text-[#495057] leading-tight mb-1">{place.name}</h3>
+                    <span className="text-[13px] text-[#ACB5BD] font-medium">⏰ {place.open_at.substring(0, 5)} ~ {place.close_at.substring(0, 5)}</span>
                   </div>
-                  
-                  <div className="text-sm text-gray-500 mb-3 flex gap-2 font-medium">
-                    <span>⏰ 영업시간: {place.open_at?.substring(0, 5)} ~ {place.close_at?.substring(0, 5)}</span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {(() => {
-                      // 배열에 들어갈 데이터가 string(문자열) 타입임을 명시합니다.
-                      let tags: string[] = []; 
-                      try {
-                        const cTags = typeof place.condition_tags === 'string' ? JSON.parse(place.condition_tags) : (place.condition_tags || []);
-                        const tTags = typeof place.taste_tags === 'string' ? JSON.parse(place.taste_tags) : (place.taste_tags || []);
-                        tags = [...cTags, ...tTags];
-                      } catch(e) { tags = []; }
-                      
-                      return tags.map((tag: string, i: number) => (
-                        <span key={i} className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-md">
-                          {tag}
-                        </span>
-                      ));
-                    })()}
+                  {/* 시그니처 포인트 컬러: #FF6B00 반영 */}
+                  <div className="bg-[#FF6B00] text-white text-[14px] font-black px-3 py-1 rounded-full shadow-lg shadow-[#FF6B00]/20">
+                    {place.base_score}%
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="h-[1px] bg-gray-50 w-full" />
+
+                {/* 2-Tier Tag System: Flexbox 배열 */}
+                <div className="flex flex-col gap-2">
+                  {/* 1층: 운영 조건 (Condition Tags) */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {JSON.parse(place.condition_tags || "[]").map((tag: string, i: number) => (
+                      <span key={i} className="bg-gray-50 text-[#495057] text-[12px] font-semibold px-2.5 py-1 rounded-lg border border-gray-100">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                  {/* 2층: 취향 속성 (Taste Tags) */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {JSON.parse(place.taste_tags || "[]").map((tag: string, i: number) => (
+                      <span key={i} className="bg-[#FF6B00]/5 text-[#FF6B00] text-[12px] font-bold px-2.5 py-1 rounded-lg border border-[#FF6B00]/10">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))
           )}
         </main>
       </div>
