@@ -1,0 +1,8 @@
+/* 최신 Tailwind CSS v4 엔진 호출 */
+@import "tailwindcss";
+
+/* CDO님의 가이드라인 기본 배경/텍스트 색상 적용 */
+body {
+  background-color: #ffffff;
+  color: #1A1A1A;
+}
