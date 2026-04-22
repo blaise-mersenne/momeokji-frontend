@@ -1,8 +1,43 @@
-/* 최신 Tailwind CSS v4 엔진 호출 */
 @import "tailwindcss";
 
-/* CDO님의 가이드라인 기본 배경/텍스트 색상 적용 */
+:root {
+  --orange:        rgb(255,111,0);
+  --orange-hot:    rgb(255,105,0);
+  --orange-deep:   rgb(245,73,0);
+  --orange-bright: rgb(255,107,0);
+  --orange-light:  rgb(255,237,212);
+  --orange-pale:   rgb(255,247,237);
+  --yellow:        rgb(253,199,0);
+
+  --ink:           rgb(16,24,40);
+  --ink-2:         rgb(30,41,57);
+  --text:          rgb(54,65,83);
+  --text-mid:      rgb(74,85,101);
+  --text-muted:    rgb(106,114,130);
+  --text-dim:      rgb(173,181,189);
+
+  --border:        rgb(229,231,235);
+  --border-2:      rgb(209,213,220);
+  --bg:            rgb(249,250,251);
+  --bg-2:          rgb(243,244,246);
+  --white:         #fff;
+  --danger:        rgb(244,67,54);
+
+  --shadow-1: 0 2px 4px -2px rgba(0,0,0,.1), 0 4px 6px -1px rgba(0,0,0,.1);
+  --shadow-2: 0 4px 6px -4px rgba(0,0,0,.1), 0 10px 15px -3px rgba(0,0,0,.1);
+  --shadow-3: 0 8px 10px -6px rgba(0,0,0,.1), 0 20px 25px -5px rgba(0,0,0,.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  background-color: #ffffff;
-  color: #1A1A1A;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', 'Noto Sans KR', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
 }

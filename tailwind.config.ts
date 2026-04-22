@@ -8,27 +8,39 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          primary: '#FF6B00',    // CTA, 매칭점수 등 액션 컬러
-          // CDO님 텍스트 명세 기준(#D1E9F6). 피그마 시안 기준 연회색으로 원하시면 '#F9FAFB'로 변경하시면 됩니다.
-          bg: '#D1E9F6',         
-          card: '#FFFFFF',       // 카드 뷰 배경
+        orange: {
+          DEFAULT: "rgb(255,111,0)",
+          hot:     "rgb(255,105,0)",
+          deep:    "rgb(245,73,0)",
+          bright:  "rgb(255,107,0)",
+          light:   "rgb(255,237,212)",
+          pale:    "rgb(255,247,237)",
         },
-        text: {
-          main: '#495057',       // H1, 본문 등 메인 텍스트
-          sub: '#ACB5BD',        // 거리, 시간 등 부가 정보
-          tag: '#495057',        // 태그 텍스트
+        yellow:  "rgb(253,199,0)",
+        ink:     "rgb(16,24,40)",
+        surface: {
+          DEFAULT: "rgb(249,250,251)",
+          alt:     "rgb(243,244,246)",
         },
-        ui: {
-          tagBg: '#F1F3F5',      // 태그 배경
-        }
+        danger: "rgb(244,67,54)",
       },
       borderRadius: {
-        'card': '16px',          // 공통 카드 곡률
+        badge: "6px",
+        chip:  "8px",
+        icon:  "10px",
+        thumb: "12px",
+        stat:  "14px",
+        card:  "16px",
+        nudge: "20px",
+        hero:  "24px",
+        pill:  "999px",
       },
-      letterSpacing: {
-        'tight-brand': '-0.02em', // 로고 및 강조 타이틀용 자간
-      }
+      boxShadow: {
+        1:   "0 2px 4px -2px rgba(0,0,0,.1), 0 4px 6px -1px rgba(0,0,0,.1)",
+        2:   "0 4px 6px -4px rgba(0,0,0,.1), 0 10px 15px -3px rgba(0,0,0,.1)",
+        3:   "0 8px 10px -6px rgba(0,0,0,.1), 0 20px 25px -5px rgba(0,0,0,.1)",
+        fab: "0 25px 50px -12px rgba(0,0,0,.25)",
+      },
     },
   },
   plugins: [],
