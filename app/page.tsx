@@ -18,12 +18,61 @@ interface MenuItem {
   restaurants: RestaurantEntry[];
 }
 
+// genre 필드를 포함한 내부 전용 타입
+interface MenuItemWithGenre extends MenuItem {
+  genre: string;
+}
+
+function shuffle<T>(arr: T[]): T[] {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function selectByGenreDiversity(items: MenuItemWithGenre[], count: number): MenuItemWithGenre[] {
+  if (items.length <= count) return shuffle(items);
+
+  // 장르별 그룹 생성 후 각 그룹 내부를 셔플
+  const genreMap = new Map<string, MenuItemWithGenre[]>();
+  for (const item of items) {
+    const genre = item.genre || "기타";
+    if (!genreMap.has(genre)) genreMap.set(genre, []);
+    genreMap.get(genre)!.push(item);
+  }
+  for (const [g, group] of genreMap) genreMap.set(g, shuffle(group));
+
+  const selected: MenuItemWithGenre[] = [];
+
+  // Step 2: 각 장르에서 1개씩 랜덤 선택
+  for (const genre of shuffle([...genreMap.keys()])) {
+    if (selected.length >= count) break;
+    const group = genreMap.get(genre)!;
+    selected.push(group.shift()!);
+  }
+
+  // Step 3: 6개가 될 때까지 남은 항목에서 추가 선택 (다양한 장르 우선)
+  while (selected.length < count) {
+    // 아직 항목이 남아있는 장르를 shuffle해서 순서를 랜덤화
+    const remaining = shuffle([...genreMap.entries()].filter(([, g]) => g.length > 0));
+    if (remaining.length === 0) break;
+    for (const [, group] of remaining) {
+      if (selected.length >= count) break;
+      selected.push(group.shift()!);
+    }
+  }
+
+  // Step 4: 최종 6개를 섞어서 반환 (같은 식당 메뉴 연속 방지)
+  return shuffle(selected);
+}
+
 async function fetchMenusFromDB(): Promise<MenuItem[]> {
-  // 1단계: menus 테이블 조회 (실제 컬럼명: id, name, avg_price, parent_group)
+  // 1단계: menus 전체 조회 — genre 컬럼 포함, limit 제거
   const { data: menusData, error: menusError } = await supabase
     .from("menus")
-    .select("id, name, avg_price, parent_group")
-    .limit(6);
+    .select("id, name, genre, avg_price, parent_group");
 
   if (menusError) {
     console.error("[Supabase] menus 조회 실패:", menusError);
@@ -31,7 +80,6 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
   }
 
   // 2단계: parent_group(text)으로 restaurants 조회
-  // parent_group이 text 타입이라 FK 제약이 없으므로 ! 조인 대신 수동 조인
   const restaurantIds = [...new Set(
     (menusData ?? []).map((m) => m.parent_group).filter(Boolean)
   )];
@@ -48,17 +96,22 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
     throw new Error(restaurantsError.message);
   }
 
-  // 3단계: id → restaurant 맵 (parent_group이 text이므로 String으로 통일)
+  // 3단계: id → restaurant 맵
   const restaurantMap = new Map(
     (restaurantsData ?? []).map((r) => [String(r.id), r])
   );
 
-  // 4단계: menu.name 기준으로 그룹핑
-  const groupMap = new Map<string, MenuItem>();
+  // 4단계: menu.name 기준으로 그룹핑 (genre 포함)
+  const groupMap = new Map<string, MenuItemWithGenre>();
   for (const menu of menusData ?? []) {
     const restaurant = restaurantMap.get(String(menu.parent_group));
     if (!groupMap.has(menu.name)) {
-      groupMap.set(menu.name, { id: menu.id, menuName: menu.name, restaurants: [] });
+      groupMap.set(menu.name, {
+        id: menu.id,
+        menuName: menu.name,
+        genre: menu.genre ?? "기타",
+        restaurants: [],
+      });
     }
     if (restaurant) {
       groupMap.get(menu.name)!.restaurants.push({
@@ -69,7 +122,10 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
       });
     }
   }
-  return Array.from(groupMap.values());
+
+  // 5단계: 장르 다양성 기반으로 6개 선별
+  const allItems = Array.from(groupMap.values());
+  return selectByGenreDiversity(allItems, 6).map(({ genre: _g, ...item }) => item);
 }
 
 // ── Icons ────────────────────────────────────────────────────
