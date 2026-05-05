@@ -1,0 +1,32 @@
+name: Keep Supabase Alive
+
+on:
+  schedule:
+    # 매일 오전 9시 (한국 시간 기준) 자동 실행
+    # UTC 기준 00:00 = KST 09:00
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+    # 수동 실행 버튼도 활성화 (테스트용)
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}")
+
+          echo "Supabase 응답 코드: $response"
+
+          if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
+            echo "✅ Supabase 정상 응답 확인"
+          elif [ "$response" = "400" ]; then
+            echo "✅ Supabase 정상 응답 확인 (400은 연결 성공 의미)"
+          else
+            echo "⚠️ 응답 코드 $response — Supabase 상태를 확인해 주세요."
+            exit 1
+          fi
