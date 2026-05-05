@@ -9,7 +9,7 @@ interface RestaurantEntry {
   restaurantName: string;
   menuName: string;
   price: number;
-  walkMinutes: number;
+  distanceKm: number;
 }
 
 interface MenuItem {
@@ -18,50 +18,53 @@ interface MenuItem {
   restaurants: RestaurantEntry[];
 }
 
-// Supabase row shape returned by the joined query
-interface MenuRow {
-  id: number;
-  menu_name: string;
-  restaurants: {
-    restaurant_name: string;
-    menu_name: string;
-    price: number;
-    walk_minutes: number;
-  } | null;
-}
-
 async function fetchMenusFromDB(): Promise<MenuItem[]> {
-  const { data, error } = await supabase
+  // 1단계: menus 테이블 조회 (실제 컬럼명: id, name, avg_price, parent_group)
+  const { data: menusData, error: menusError } = await supabase
     .from("menus")
-    .select(`
-      id,
-      menu_name,
-      restaurants!parent_group (
-        restaurant_name,
-        menu_name,
-        price,
-        walk_minutes
-      )
-    `);
+    .select("id, name, avg_price, parent_group");
 
-  if (error) throw new Error(error.message);
+  if (menusError) {
+    console.error("[Supabase] menus 조회 실패:", menusError);
+    throw new Error(menusError.message);
+  }
 
-  // Group rows by menu_name so each card shows all matching restaurants
+  // 2단계: parent_group(text)으로 restaurants 조회
+  // parent_group이 text 타입이라 FK 제약이 없으므로 ! 조인 대신 수동 조인
+  const restaurantIds = [...new Set(
+    (menusData ?? []).map((m) => m.parent_group).filter(Boolean)
+  )];
+
+  if (restaurantIds.length === 0) return [];
+
+  const { data: restaurantsData, error: restaurantsError } = await supabase
+    .from("restaurants")
+    .select("id, name, price, distance_km")
+    .in("id", restaurantIds);
+
+  if (restaurantsError) {
+    console.error("[Supabase] restaurants 조회 실패:", restaurantsError);
+    throw new Error(restaurantsError.message);
+  }
+
+  // 3단계: id → restaurant 맵 (parent_group이 text이므로 String으로 통일)
+  const restaurantMap = new Map(
+    (restaurantsData ?? []).map((r) => [String(r.id), r])
+  );
+
+  // 4단계: menu.name 기준으로 그룹핑
   const groupMap = new Map<string, MenuItem>();
-  for (const row of (data as unknown as MenuRow[]) ?? []) {
-    if (!groupMap.has(row.menu_name)) {
-      groupMap.set(row.menu_name, {
-        id: row.id,
-        menuName: row.menu_name,
-        restaurants: [],
-      });
+  for (const menu of menusData ?? []) {
+    const restaurant = restaurantMap.get(String(menu.parent_group));
+    if (!groupMap.has(menu.name)) {
+      groupMap.set(menu.name, { id: menu.id, menuName: menu.name, restaurants: [] });
     }
-    if (row.restaurants) {
-      groupMap.get(row.menu_name)!.restaurants.push({
-        restaurantName: row.restaurants.restaurant_name,
-        menuName: row.restaurants.menu_name,
-        price: row.restaurants.price,
-        walkMinutes: row.restaurants.walk_minutes,
+    if (restaurant) {
+      groupMap.get(menu.name)!.restaurants.push({
+        restaurantName: restaurant.name,
+        menuName: menu.name,
+        price: restaurant.price ?? menu.avg_price ?? 0,
+        distanceKm: restaurant.distance_km ?? 0,
       });
     }
   }
@@ -325,7 +328,7 @@ function RecommendCard({
                   fontSize: 12, color: "var(--text-mid)",
                   whiteSpace: "nowrap", flexShrink: 0, minWidth: 52, textAlign: "right",
                 }}>
-                  도보 {r.walkMinutes}분
+                  {r.distanceKm}km
                 </div>
               </a>
             ))}
