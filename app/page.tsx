@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 
 // ── Data Model ────────────────────────────────────────────────
 
@@ -17,67 +18,55 @@ interface MenuItem {
   restaurants: RestaurantEntry[];
 }
 
-const MENUS: MenuItem[] = [
-  {
-    id: 1,
-    menuName: "까르보나라",
-    restaurants: [
-      { restaurantName: "파스타노", menuName: "까르보나라 스파게티", price: 12000, walkMinutes: 8 },
-      { restaurantName: "이탈리안 키친", menuName: "크림 까르보나라", price: 10000, walkMinutes: 5 },
-      { restaurantName: "라 포르케타", menuName: "까르보나라", price: 13000, walkMinutes: 12 },
-    ],
-  },
-  {
-    id: 2,
-    menuName: "제육볶음",
-    restaurants: [
-      { restaurantName: "한솥도시락", menuName: "제육볶음 도시락", price: 8500, walkMinutes: 3 },
-      { restaurantName: "뚝배기집", menuName: "제육볶음 정식", price: 9000, walkMinutes: 7 },
-    ],
-  },
-  {
-    id: 3,
-    menuName: "김치찌개",
-    restaurants: [
-      { restaurantName: "엄마손 식당", menuName: "묵은지 김치찌개", price: 8000, walkMinutes: 4 },
-      { restaurantName: "청국장마을", menuName: "돼지고기 김치찌개", price: 8500, walkMinutes: 9 },
-      { restaurantName: "24시감자탕", menuName: "김치찌개", price: 7500, walkMinutes: 6 },
-    ],
-  },
-  {
-    id: 4,
-    menuName: "삼계탕",
-    restaurants: [
-      { restaurantName: "고려삼계탕", menuName: "전통 삼계탕", price: 16000, walkMinutes: 11 },
-      { restaurantName: "토담골", menuName: "삼계탕", price: 14000, walkMinutes: 8 },
-    ],
-  },
-  {
-    id: 5,
-    menuName: "라멘",
-    restaurants: [
-      { restaurantName: "멘야무사시", menuName: "쇼유라멘", price: 12000, walkMinutes: 6 },
-      { restaurantName: "잇푸도", menuName: "시로마루모토", price: 13500, walkMinutes: 14 },
-      { restaurantName: "라멘야", menuName: "돈코츠라멘", price: 11000, walkMinutes: 5 },
-    ],
-  },
-  {
-    id: 6,
-    menuName: "비빔밥",
-    restaurants: [
-      { restaurantName: "전주비빔밥집", menuName: "전주 돌솥비빔밥", price: 9500, walkMinutes: 7 },
-      { restaurantName: "한옥마을식당", menuName: "비빔밥 정식", price: 8000, walkMinutes: 10 },
-    ],
-  },
-  {
-    id: 7,
-    menuName: "순대국밥",
-    restaurants: [
-      { restaurantName: "진주집", menuName: "순대국밥", price: 8000, walkMinutes: 3 },
-      { restaurantName: "할머니순대", menuName: "순대국밥 (곱빼기)", price: 9000, walkMinutes: 8 },
-    ],
-  },
-];
+// Supabase row shape returned by the joined query
+interface MenuRow {
+  id: number;
+  menu_name: string;
+  restaurants: {
+    restaurant_name: string;
+    menu_name: string;
+    price: number;
+    walk_minutes: number;
+  } | null;
+}
+
+async function fetchMenusFromDB(): Promise<MenuItem[]> {
+  const { data, error } = await supabase
+    .from("menus")
+    .select(`
+      id,
+      menu_name,
+      restaurants!parent_group (
+        restaurant_name,
+        menu_name,
+        price,
+        walk_minutes
+      )
+    `);
+
+  if (error) throw new Error(error.message);
+
+  // Group rows by menu_name so each card shows all matching restaurants
+  const groupMap = new Map<string, MenuItem>();
+  for (const row of (data as unknown as MenuRow[]) ?? []) {
+    if (!groupMap.has(row.menu_name)) {
+      groupMap.set(row.menu_name, {
+        id: row.id,
+        menuName: row.menu_name,
+        restaurants: [],
+      });
+    }
+    if (row.restaurants) {
+      groupMap.get(row.menu_name)!.restaurants.push({
+        restaurantName: row.restaurants.restaurant_name,
+        menuName: row.restaurants.menu_name,
+        price: row.restaurants.price,
+        walkMinutes: row.restaurants.walk_minutes,
+      });
+    }
+  }
+  return Array.from(groupMap.values());
+}
 
 // ── Icons ────────────────────────────────────────────────────
 
@@ -190,6 +179,76 @@ function HintBubble({ text }: { text: string }) {
   );
 }
 
+// ── SkeletonCard (로딩 중 플레이스홀더) ───────────────────────
+
+function SkeletonCard() {
+  return (
+    <div style={{
+      borderRadius: 16, background: "#fff",
+      boxShadow: "var(--shadow-1)",
+      padding: "18px 20px",
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+    }}>
+      <div style={{
+        height: 18, width: "45%",
+        borderRadius: 6,
+        background: "linear-gradient(90deg, var(--bg-2) 25%, #e8e8e8 50%, var(--bg-2) 75%)",
+        backgroundSize: "200% 100%",
+        animation: "shimmer 1.4s infinite",
+      }} />
+      <div style={{
+        height: 18, width: 18,
+        borderRadius: "50%",
+        background: "var(--bg-2)",
+      }} />
+      <style>{`
+        @keyframes shimmer {
+          0%   { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── EmptyState ────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <div style={{
+      padding: "48px 20px",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+    }}>
+      <span style={{ fontSize: 40 }}>🍽️</span>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
+        추천 메뉴가 없어요
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", lineHeight: "20px" }}>
+        아직 등록된 추천 메뉴가 없습니다.<br />조금 뒤 다시 확인해 주세요.
+      </div>
+    </div>
+  );
+}
+
+// ── ErrorState ────────────────────────────────────────────────
+
+function ErrorState({ message }: { message: string }) {
+  return (
+    <div style={{
+      padding: "48px 20px",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 12,
+    }}>
+      <span style={{ fontSize: 40 }}>⚠️</span>
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
+        데이터를 불러오지 못했어요
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", lineHeight: "20px" }}>
+        {message}
+      </div>
+    </div>
+  );
+}
+
 // ── RecommendCard ─────────────────────────────────────────────
 
 function RecommendCard({
@@ -298,6 +357,48 @@ function FAB() {
 export default function Home() {
   const [mode, setMode] = useState("dineout");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [menus, setMenus] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setFetchError(null);
+    fetchMenusFromDB()
+      .then(setMenus)
+      .catch((err: Error) => setFetchError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function renderCardList() {
+    if (loading) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      );
+    }
+    if (fetchError) {
+      return <ErrorState message={fetchError} />;
+    }
+    if (menus.length === 0) {
+      return <EmptyState />;
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {menus.map((item, i) => (
+          <RecommendCard
+            key={item.id}
+            item={item}
+            expanded={expanded === i}
+            onToggle={() => setExpanded(expanded === i ? null : i)}
+          />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", justifyContent: "center" }}>
@@ -324,15 +425,8 @@ export default function Home() {
             </div>
           </div>
 
-          <div style={{ padding: "12px 20px 0", display: "flex", flexDirection: "column", gap: 10 }}>
-            {MENUS.map((item, i) => (
-              <RecommendCard
-                key={item.id}
-                item={item}
-                expanded={expanded === i}
-                onToggle={() => setExpanded(expanded === i ? null : i)}
-              />
-            ))}
+          <div style={{ padding: "12px 20px 0" }}>
+            {renderCardList()}
           </div>
         </div>
 
