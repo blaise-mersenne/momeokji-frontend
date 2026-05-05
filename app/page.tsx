@@ -22,7 +22,8 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
   // 1단계: menus 테이블 조회 (실제 컬럼명: id, name, avg_price, parent_group)
   const { data: menusData, error: menusError } = await supabase
     .from("menus")
-    .select("id, name, avg_price, parent_group");
+    .select("id, name, avg_price, parent_group")
+    .limit(6);
 
   if (menusError) {
     console.error("[Supabase] menus 조회 실패:", menusError);
