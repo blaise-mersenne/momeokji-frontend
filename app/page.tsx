@@ -379,7 +379,7 @@ function RecommendCard({
                   fontSize: 14, fontWeight: 600, color: "var(--ink)",
                   whiteSpace: "nowrap", flexShrink: 0,
                 }}>
-                  {r.price.toLocaleString()}원
+                  {Math.round(r.price).toLocaleString('ko-KR')}원
                 </div>
                 <div style={{
                   fontSize: 12, color: "var(--text-mid)",
