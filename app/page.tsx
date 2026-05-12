@@ -15,12 +15,39 @@ interface RestaurantEntry {
 interface MenuItem {
   id: number;
   menuName: string;
+  displayName?: string;
   restaurants: RestaurantEntry[];
 }
 
-// genre 필드를 포함한 내부 전용 타입
+// genre, mealTime 필드를 포함한 내부 전용 타입
 interface MenuItemWithGenre extends MenuItem {
   genre: string;
+  mealTime: string;
+}
+
+// ── 시간대 유틸 ──────────────────────────────────────────────
+
+const MEAL_TIME_KEYWORDS: { tag: string; keywords: string[] }[] = [
+  { tag: "lunch",   keywords: ["런치", "lunch", "점심", "Lunch"] },
+  { tag: "dinner",  keywords: ["디너", "dinner", "저녁", "Dinner"] },
+  { tag: "morning", keywords: ["모닝", "morning", "아침", "브런치"] },
+  { tag: "dawn",    keywords: ["24시", "24H", "새벽"] },
+];
+
+function detectMealTime(name: string): string {
+  for (const { tag, keywords } of MEAL_TIME_KEYWORDS) {
+    if (keywords.some((k) => name.includes(k))) return tag;
+  }
+  return "all";
+}
+
+function getCurrentTimeSlot(): "morning" | "lunch" | "break" | "dinner" | "dawn" {
+  const hour = new Date().getHours();
+  if (hour >= 6 && hour < 11)  return "morning";
+  if (hour >= 11 && hour < 15) return "lunch";
+  if (hour >= 15 && hour < 17) return "break";
+  if (hour >= 17)               return "dinner";
+  return "dawn";
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -72,7 +99,7 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
   // 1단계: menus 전체 조회 — genre 컬럼 포함, limit 제거
   const { data: menusData, error: menusError } = await supabase
     .from("menus")
-    .select("id, name, genre, avg_price, parent_group");
+    .select("id, name, display_name, genre, avg_price, parent_group");
 
   if (menusError) {
     console.error("[Supabase] menus 조회 실패:", menusError);
@@ -109,7 +136,9 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
       groupMap.set(menu.name, {
         id: menu.id,
         menuName: menu.name,
+        displayName: menu.display_name ?? undefined,
         genre: menu.genre ?? "기타",
+        mealTime: detectMealTime(menu.name),
         restaurants: [],
       });
     }
@@ -123,9 +152,18 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
     }
   }
 
-  // 5단계: 장르 다양성 기반으로 6개 선별
+  // 5단계: 시간대 필터링 후 장르 다양성 기반으로 6개 선별
   const allItems = Array.from(groupMap.values());
-  return selectByGenreDiversity(allItems, 6).map(({ genre: _g, ...item }) => item);
+  const hideTagsMap: Record<string, string[]> = {
+    morning: ["dinner", "lunch"],
+    lunch:   ["dinner", "morning"],
+    break:   ["morning"],
+    dinner:  ["morning", "lunch"],
+    dawn:    ["morning", "lunch", "dinner"],
+  };
+  const hideTags = hideTagsMap[getCurrentTimeSlot()] ?? [];
+  const filteredItems = allItems.filter((item) => !hideTags.includes(item.mealTime));
+  return selectByGenreDiversity(filteredItems, 6).map(({ genre: _g, mealTime: _m, ...item }) => item);
 }
 
 // ── Icons ────────────────────────────────────────────────────
@@ -335,7 +373,7 @@ function RecommendCard({
         }}
       >
         <span style={{ fontSize: 17, fontWeight: 700, color: "var(--ink)" }}>
-          {item.menuName}
+          {item.displayName ?? item.menuName}
         </span>
         <IconChevron dir={expanded ? "up" : "down"} />
       </div>
@@ -396,6 +434,26 @@ function RecommendCard({
   );
 }
 
+// ── BreaktimeBanner ───────────────────────────────────────────
+
+function BreaktimeBanner() {
+  return (
+    <div style={{
+      background: "#FFF7ED",
+      border: "1px solid #FED7AA",
+      borderRadius: 12,
+      padding: "12px 16px",
+      display: "flex", alignItems: "flex-start", gap: 10,
+      marginBottom: 2,
+    }}>
+      <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
+      <span style={{ fontSize: 13, color: "#92400E", lineHeight: "20px" }}>
+        브레이크타임 시간대입니다. 방문 전 영업 여부를 확인해 주세요.
+      </span>
+    </div>
+  );
+}
+
 // ── FAB ──────────────────────────────────────────────────────
 
 function FAB() {
@@ -448,6 +506,7 @@ export default function Home() {
     }
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {getCurrentTimeSlot() === "break" && <BreaktimeBanner />}
         {menus.map((item, i) => (
           <RecommendCard
             key={item.id}
