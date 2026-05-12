@@ -146,7 +146,7 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
       groupMap.get(menu.name)!.restaurants.push({
         restaurantName: restaurant.name,
         menuName: menu.name,
-        price: restaurant.price ?? menu.avg_price ?? 0,
+        price: menu.avg_price ?? 0,
         distanceKm: restaurant.distance_km ?? 0,
       });
     }
