@@ -6,7 +6,9 @@
       "Bash(git stash *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\방지영\\\\my-startup\\\\momeokji-frontend\" -Force)",
+      "Bash(Select-Object Name, FullName)"
     ]
   }
 }
