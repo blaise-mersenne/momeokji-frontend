@@ -173,8 +173,8 @@ async function fetchMenusFromDB(locationTag: string): Promise<MenuItem[]> {
 
   if (!restaurantsData || restaurantsData.length === 0) return [];
 
-  const restaurantIds = restaurantsData.map((r) => String(r.id));
-  const restaurantMap = new Map(restaurantsData.map((r) => [String(r.id), r]));
+  const restaurantIds = restaurantsData.map((r) => r.id);
+  const restaurantMap = new Map(restaurantsData.map((r) => [r.id, r]));
 
   // 2단계: 해당 식당의 menus 조회
   const { data: menusData, error: menusError } = await supabase
@@ -192,7 +192,7 @@ async function fetchMenusFromDB(locationTag: string): Promise<MenuItem[]> {
   // 3단계: menu.name 기준으로 그룹핑
   const groupMap = new Map<string, MenuItemWithGenre>();
   for (const menu of menusData) {
-    const restaurant = restaurantMap.get(String(menu.parent_group));
+    const restaurant = restaurantMap.get(menu.parent_group);
     if (!groupMap.has(menu.name)) {
       groupMap.set(menu.name, {
         id: menu.id,
