@@ -6,7 +6,11 @@
       "Bash(git stash *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\방지영\\\\my-startup\\\\momeokji-frontend\" -Force)",
+      "Bash(Select-Object Name, FullName)",
+      "PowerShell(Head 50 *)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\방지영\\\\my-startup\\\\momeokji-frontend\" -Recurse | Where-Object { $_.FullName -notmatch \"node_modules\" -and $_.FullName -notmatch \"\\\\.next\" } | Select-Object -First 60 FullName)"
     ]
   }
 }

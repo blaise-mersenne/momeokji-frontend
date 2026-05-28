@@ -1,7 +1,77 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+
+// ── Location Types & Constants ────────────────────────────────
+
+type LocationId = "bucheon" | "magok";
+
+interface LocationOption {
+  id: LocationId;
+  label: string;
+  shortLabel: string;
+  tag: string;
+  lat: number;
+  lng: number;
+}
+
+const LOCATIONS: LocationOption[] = [
+  {
+    id: "bucheon",
+    label: "부천 범박동/옥길동",
+    shortLabel: "부천 범박동",
+    tag: "부천",
+    lat: 37.4786,
+    lng: 126.8195,
+  },
+  {
+    id: "magok",
+    label: "서울 마곡동",
+    shortLabel: "서울 마곡동",
+    tag: "마곡",
+    lat: 37.5594,
+    lng: 126.83,
+  },
+];
+
+const DEFAULT_LOCATION: LocationId = "magok";
+const LOCATION_STORAGE_KEY = "momeokji_location";
+
+// ── Location Utils ────────────────────────────────────────────
+
+function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function detectLocationByGPS(): Promise<LocationId> {
+  return new Promise((resolve) => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      resolve(DEFAULT_LOCATION);
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        let nearest = LOCATIONS[0];
+        let minDist = Infinity;
+        for (const loc of LOCATIONS) {
+          const d = getDistanceKm(latitude, longitude, loc.lat, loc.lng);
+          if (d < minDist) { minDist = d; nearest = loc; }
+        }
+        resolve(nearest.id);
+      },
+      () => resolve(DEFAULT_LOCATION),
+      { timeout: 5000 }
+    );
+  });
+}
 
 // ── Data Model ────────────────────────────────────────────────
 
@@ -19,7 +89,6 @@ interface MenuItem {
   restaurants: RestaurantEntry[];
 }
 
-// genre, mealTime 필드를 포함한 내부 전용 타입
 interface MenuItemWithGenre extends MenuItem {
   genre: string;
   mealTime: string;
@@ -62,7 +131,6 @@ function shuffle<T>(arr: T[]): T[] {
 function selectByGenreDiversity(items: MenuItemWithGenre[], count: number): MenuItemWithGenre[] {
   if (items.length <= count) return shuffle(items);
 
-  // 장르별 그룹 생성 후 각 그룹 내부를 셔플
   const genreMap = new Map<string, MenuItemWithGenre[]>();
   for (const item of items) {
     const genre = item.genre || "기타";
@@ -73,16 +141,13 @@ function selectByGenreDiversity(items: MenuItemWithGenre[], count: number): Menu
 
   const selected: MenuItemWithGenre[] = [];
 
-  // Step 2: 각 장르에서 1개씩 랜덤 선택
   for (const genre of shuffle([...genreMap.keys()])) {
     if (selected.length >= count) break;
     const group = genreMap.get(genre)!;
     selected.push(group.shift()!);
   }
 
-  // Step 3: 6개가 될 때까지 남은 항목에서 추가 선택 (다양한 장르 우선)
   while (selected.length < count) {
-    // 아직 항목이 남아있는 장르를 shuffle해서 순서를 랜덤화
     const remaining = shuffle([...genreMap.entries()].filter(([, g]) => g.length > 0));
     if (remaining.length === 0) break;
     for (const [, group] of remaining) {
@@ -91,47 +156,43 @@ function selectByGenreDiversity(items: MenuItemWithGenre[], count: number): Menu
     }
   }
 
-  // Step 4: 최종 6개를 섞어서 반환 (같은 식당 메뉴 연속 방지)
   return shuffle(selected);
 }
 
-async function fetchMenusFromDB(): Promise<MenuItem[]> {
-  // 1단계: menus 전체 조회 — genre 컬럼 포함, limit 제거
-  const { data: menusData, error: menusError } = await supabase
-    .from("menus")
-    .select("id, name, display_name, genre, avg_price, parent_group");
-
-  if (menusError) {
-    console.error("[Supabase] menus 조회 실패:", menusError);
-    throw new Error(menusError.message);
-  }
-
-  // 2단계: parent_group(text)으로 restaurants 조회
-  const restaurantIds = [...new Set(
-    (menusData ?? []).map((m) => m.parent_group).filter(Boolean)
-  )];
-
-  if (restaurantIds.length === 0) return [];
-
+async function fetchMenusFromDB(locationTag: string): Promise<MenuItem[]> {
+  // 1단계: 지역 태그로 restaurants 먼저 조회
   const { data: restaurantsData, error: restaurantsError } = await supabase
     .from("restaurants")
-    .select("id, name, price, distance_km")
-    .in("id", restaurantIds);
+    .select("id, name, distance_km")
+    .filter("condition_tags", "cs", `["${locationTag}"]`);
 
   if (restaurantsError) {
     console.error("[Supabase] restaurants 조회 실패:", restaurantsError);
     throw new Error(restaurantsError.message);
   }
 
-  // 3단계: id → restaurant 맵
-  const restaurantMap = new Map(
-    (restaurantsData ?? []).map((r) => [String(r.id), r])
-  );
+  if (!restaurantsData || restaurantsData.length === 0) return [];
 
-  // 4단계: menu.name 기준으로 그룹핑 (genre 포함)
+  const restaurantIds = restaurantsData.map((r) => r.id);
+  const restaurantMap = new Map(restaurantsData.map((r) => [r.id, r]));
+
+  // 2단계: 해당 식당의 menus 조회
+  const { data: menusData, error: menusError } = await supabase
+    .from("menus")
+    .select("id, name, display_name, genre, avg_price, parent_group")
+    .in("parent_group", restaurantIds);
+
+  if (menusError) {
+    console.error("[Supabase] menus 조회 실패:", menusError);
+    throw new Error(menusError.message);
+  }
+
+  if (!menusData || menusData.length === 0) return [];
+
+  // 3단계: menu.name 기준으로 그룹핑
   const groupMap = new Map<string, MenuItemWithGenre>();
-  for (const menu of menusData ?? []) {
-    const restaurant = restaurantMap.get(String(menu.parent_group));
+  for (const menu of menusData) {
+    const restaurant = restaurantMap.get(menu.parent_group);
     if (!groupMap.has(menu.name)) {
       groupMap.set(menu.name, {
         id: menu.id,
@@ -152,7 +213,7 @@ async function fetchMenusFromDB(): Promise<MenuItem[]> {
     }
   }
 
-  // 5단계: 시간대 필터링 후 장르 다양성 기반으로 6개 선별
+  // 4단계: 시간대 필터링 후 장르 다양성 기반으로 6개 선별
   const allItems = Array.from(groupMap.values());
   const hideTagsMap: Record<string, string[]> = {
     morning: ["dinner", "lunch"],
@@ -224,6 +285,114 @@ function GlobalHeader() {
         <IconUser />
       </div>
     </header>
+  );
+}
+
+// ── LocationPicker ────────────────────────────────────────────
+
+function LocationPicker({
+  location,
+  onLocationChange,
+}: {
+  location: LocationId;
+  onLocationChange: (id: LocationId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [gpsLoading, setGpsLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const current = LOCATIONS.find((l) => l.id === location)!;
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutsideClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open]);
+
+  async function handleGPS() {
+    setGpsLoading(true);
+    setOpen(false);
+    const id = await detectLocationByGPS();
+    localStorage.setItem(LOCATION_STORAGE_KEY, id);
+    onLocationChange(id);
+    setGpsLoading(false);
+  }
+
+  function handleSelect(id: LocationId) {
+    localStorage.setItem(LOCATION_STORAGE_KEY, id);
+    onLocationChange(id);
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} style={{ position: "relative", alignSelf: "flex-start" }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          background: "var(--bg-2)", border: "none",
+          borderRadius: 999, padding: "7px 12px 7px 10px",
+          cursor: "pointer", fontSize: 14, fontWeight: 600,
+          color: "var(--ink)",
+        }}
+      >
+        <span style={{ fontSize: 14 }}>📍</span>
+        <span>{gpsLoading ? "위치 감지 중…" : current.shortLabel}</span>
+        <IconChevron dir={open ? "up" : "down"} size={15} color="var(--text-mid)" />
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0,
+          background: "#fff", borderRadius: 12,
+          boxShadow: "var(--shadow-3)",
+          minWidth: 210, zIndex: 100,
+          overflow: "hidden",
+          border: "1px solid var(--border)",
+        }}>
+          <button
+            onClick={handleGPS}
+            style={{
+              width: "100%", padding: "12px 16px",
+              display: "flex", alignItems: "center", gap: 10,
+              background: "none", border: "none", cursor: "pointer",
+              fontSize: 14, color: "var(--ink-2)",
+              borderBottom: "1px solid var(--border)",
+              textAlign: "left",
+            }}
+          >
+            <span style={{ fontSize: 15 }}>🎯</span>
+            현재 위치 사용 (GPS)
+          </button>
+
+          {LOCATIONS.map((loc, idx) => (
+            <button
+              key={loc.id}
+              onClick={() => handleSelect(loc.id)}
+              style={{
+                width: "100%", padding: "12px 16px",
+                display: "flex", alignItems: "center", gap: 10,
+                background: loc.id === location ? "#FFF7ED" : "none",
+                border: "none", cursor: "pointer",
+                fontSize: 14,
+                fontWeight: loc.id === location ? 700 : 400,
+                color: loc.id === location ? "var(--orange-hot)" : "var(--ink)",
+                borderBottom: idx < LOCATIONS.length - 1 ? "1px solid var(--border)" : "none",
+                textAlign: "left",
+              }}
+            >
+              <span style={{ fontSize: 15 }}>📍</span>
+              {loc.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -309,6 +478,37 @@ function SkeletonCard() {
   );
 }
 
+// ── GpsLoadingState ───────────────────────────────────────────
+
+function GpsLoadingState() {
+  return (
+    <div style={{
+      padding: "48px 20px",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+    }}>
+      <div style={{
+        width: 48, height: 48,
+        border: "4px solid var(--bg-2)",
+        borderTop: "4px solid var(--orange-hot)",
+        borderRadius: "50%",
+        animation: "spin 0.9s linear infinite",
+      }} />
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
+        위치 감지 중…
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", lineHeight: "20px" }}>
+        GPS로 가까운 지역을 찾고 있어요
+      </div>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── EmptyState ────────────────────────────────────────────────
 
 function EmptyState() {
@@ -363,7 +563,6 @@ function RecommendCard({
       overflow: "hidden",
       transition: "box-shadow .2s",
     }}>
-      {/* 메뉴명 헤더 */}
       <div
         onClick={onToggle}
         style={{
@@ -378,7 +577,6 @@ function RecommendCard({
         <IconChevron dir={expanded ? "up" : "down"} />
       </div>
 
-      {/* 아코디언: 식당 목록 */}
       {expanded && (
         <>
           <div style={{ height: 1, background: "var(--border)" }} />
@@ -478,17 +676,53 @@ export default function Home() {
   const [menus, setMenus] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [location, setLocation] = useState<LocationId>(DEFAULT_LOCATION);
+  const [locationReady, setLocationReady] = useState(false);
 
+  // 앱 최초 실행: localStorage 확인 → GPS 폴백
   useEffect(() => {
-    setLoading(true);
-    setFetchError(null);
-    fetchMenusFromDB()
-      .then(setMenus)
-      .catch((err: Error) => setFetchError(err.message))
-      .finally(() => setLoading(false));
+    const saved = localStorage.getItem(LOCATION_STORAGE_KEY) as LocationId | null;
+    if (saved && LOCATIONS.some((l) => l.id === saved)) {
+      setLocation(saved);
+      setLocationReady(true);
+    } else {
+      detectLocationByGPS().then((id) => {
+        localStorage.setItem(LOCATION_STORAGE_KEY, id);
+        setLocation(id);
+        setLocationReady(true);
+      });
+    }
   }, []);
 
+  // 지역이 확정되거나 변경될 때 메뉴 재조회
+  useEffect(() => {
+    if (!locationReady) return;
+    const locationOption = LOCATIONS.find((l) => l.id === location)!;
+    setLoading(true);
+    setFetchError(null);
+    setExpanded(null);
+    fetchMenusFromDB(locationOption.tag)
+      .then(setMenus)
+      .catch((err: Error) => {
+        console.error("[fetchMenus] 메뉴 조회 실패:", {
+          location: locationOption.id,
+          tag: locationOption.tag,
+          message: err.message,
+          error: err,
+        });
+        setFetchError(err.message);
+      })
+      .finally(() => setLoading(false));
+  }, [location, locationReady]);
+
+  function handleLocationChange(id: LocationId) {
+    setLocation(id);
+  }
+
   function renderCardList() {
+    if (!locationReady) {
+      return <GpsLoadingState />;
+    }
     if (loading) {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -531,7 +765,8 @@ export default function Home() {
         <GlobalHeader />
 
         <div style={{ flex: 1, overflowY: "auto", paddingBottom: 120 }}>
-          <div style={{ padding: "20px 20px 0", display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ padding: "16px 20px 0", display: "flex", flexDirection: "column", gap: 20 }}>
+            <LocationPicker location={location} onLocationChange={handleLocationChange} />
             <ModeTabs mode={mode} setMode={setMode} />
             <HintBubble text="오늘 하루 힘들었죠? 따뜻한 국물 요리 어때요?" />
             <div>
