@@ -164,7 +164,7 @@ async function fetchMenusFromDB(locationTag: string): Promise<MenuItem[]> {
   const { data: restaurantsData, error: restaurantsError } = await supabase
     .from("restaurants")
     .select("id, name, distance_km")
-    .contains("condition_tags", [locationTag]);
+    .filter("condition_tags", "cs", `["${locationTag}"]`);
 
   if (restaurantsError) {
     console.error("[Supabase] restaurants 조회 실패:", restaurantsError);
