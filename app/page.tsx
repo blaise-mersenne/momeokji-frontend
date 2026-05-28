@@ -478,6 +478,37 @@ function SkeletonCard() {
   );
 }
 
+// ── GpsLoadingState ───────────────────────────────────────────
+
+function GpsLoadingState() {
+  return (
+    <div style={{
+      padding: "48px 20px",
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 14,
+    }}>
+      <div style={{
+        width: 48, height: 48,
+        border: "4px solid var(--bg-2)",
+        borderTop: "4px solid var(--orange-hot)",
+        borderRadius: "50%",
+        animation: "spin 0.9s linear infinite",
+      }} />
+      <div style={{ fontSize: 15, fontWeight: 700, color: "var(--ink)" }}>
+        위치 감지 중…
+      </div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", textAlign: "center", lineHeight: "20px" }}>
+        GPS로 가까운 지역을 찾고 있어요
+      </div>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── EmptyState ────────────────────────────────────────────────
 
 function EmptyState() {
@@ -672,7 +703,15 @@ export default function Home() {
     setExpanded(null);
     fetchMenusFromDB(locationOption.tag)
       .then(setMenus)
-      .catch((err: Error) => setFetchError(err.message))
+      .catch((err: Error) => {
+        console.error("[fetchMenus] 메뉴 조회 실패:", {
+          location: locationOption.id,
+          tag: locationOption.tag,
+          message: err.message,
+          error: err,
+        });
+        setFetchError(err.message);
+      })
       .finally(() => setLoading(false));
   }, [location, locationReady]);
 
@@ -681,6 +720,9 @@ export default function Home() {
   }
 
   function renderCardList() {
+    if (!locationReady) {
+      return <GpsLoadingState />;
+    }
     if (loading) {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
