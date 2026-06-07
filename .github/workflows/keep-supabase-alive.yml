@@ -13,21 +13,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Query Supabase Database
+      - name: Insert ping record
         run: |
           response=$(curl -s -o /tmp/response.json -w "%{http_code}" \
-            "${{ secrets.SUPABASE_URL }}/rest/v1/restaurants?select=count&limit=1" \
+            -X POST \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive_log" \
             -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
             -H "Content-Type: application/json" \
-            -H "Prefer: count=exact")
+            -H "Prefer: return=minimal" \
+            -d '{"pinged_at": "'"$(date -u +%Y-%m-%dT%H:%M:%SZ)"'"}')
 
-          echo "Supabase 응답 코드: $response"
+          echo "INSERT 응답 코드: $response"
           echo "응답 내용: $(cat /tmp/response.json)"
 
           if [ "$response" -ge 200 ] && [ "$response" -lt 300 ]; then
-            echo "✅ Supabase DB 쿼리 정상 완료 — 비활성화 타이머 초기화됨"
+            echo "✅ Ping INSERT 성공"
           else
-            echo "⚠️ 응답 코드 $response — Supabase 상태를 확인해 주세요."
+            echo "⚠️ INSERT 실패: $response"
             exit 1
           fi
+
+      - name: Delete old ping records
+        run: |
+          response=$(curl -s -o /tmp/response2.json -w "%{http_code}" \
+            -X DELETE \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/keep_alive_log?pinged_at=lt.$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json")
+
+          echo "DELETE 응답 코드: $response"
+          echo "✅ 오래된 ping 기록 삭제 완료"
