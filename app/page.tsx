@@ -180,7 +180,8 @@ async function fetchMenusFromDB(locationTag: string): Promise<MenuItem[]> {
   const { data: menusData, error: menusError } = await supabase
     .from("menus")
     .select("id, name, display_name, genre, avg_price, parent_group")
-    .in("parent_group", restaurantIds);
+    .in("parent_group", restaurantIds)
+    .eq("is_side", false);
 
   if (menusError) {
     console.error("[Supabase] menus 조회 실패:", menusError);
