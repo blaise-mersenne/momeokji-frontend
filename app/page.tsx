@@ -94,6 +94,27 @@ interface MenuItemWithGenre extends MenuItem {
   mealTime: string;
 }
 
+// ── 평가(eval_simple) 타입 ─────────────────────────────────────
+
+type EvalValue = "bad" | "okay" | "good";
+
+interface EvalState {
+  recordId: string;
+  status: "pending" | EvalValue | "skipped";
+}
+
+const EVAL_OPTIONS: { value: EvalValue; label: string }[] = [
+  { value: "bad", label: "내 입맛 아님 😞" },
+  { value: "okay", label: "그냥저냥 😐" },
+  { value: "good", label: "완전 내 스타일 😍" },
+];
+
+const EVAL_RESULT_TEXT: Record<EvalValue, string> = {
+  bad: "내 입맛 아님으로 기록했어요 😞",
+  okay: "그냥저냥으로 기록했어요 😐",
+  good: "완전 내 스타일로 기록했어요 😍",
+};
+
 // ── 시간대 유틸 ──────────────────────────────────────────────
 
 const MEAL_TIME_KEYWORDS: { tag: string; keywords: string[] }[] = [
@@ -551,13 +572,15 @@ function ErrorState({ message }: { message: string }) {
 // ── RecommendCard ─────────────────────────────────────────────
 
 function RecommendCard({
-  item, expanded, onToggle, loggedKeys, onLogMeal,
+  item, expanded, onToggle, loggedKeys, onLogMeal, evalState, onEval,
 }: {
   item: MenuItem;
   expanded: boolean;
   onToggle: () => void;
   loggedKeys: Set<string>;
   onLogMeal: (item: MenuItem, key: string) => void;
+  evalState: Record<string, EvalState>;
+  onEval: (key: string, value: EvalValue | "skip") => void;
 }) {
   return (
     <div style={{
@@ -587,15 +610,20 @@ function RecommendCard({
             {item.restaurants.map((r, i) => {
               const logKey = `${item.id}_${i}`;
               const logged = loggedKeys.has(logKey);
+              const rowEvalState = evalState[logKey];
               return (
                 <div
                   key={i}
+                  style={{
+                    borderBottom: i < item.restaurants.length - 1 ? "1px solid var(--border)" : "none",
+                  }}
+                >
+                <div
                   style={{
                     display: "flex",
                     alignItems: "center",
                     padding: "13px 20px",
                     gap: 12,
-                    borderBottom: i < item.restaurants.length - 1 ? "1px solid var(--border)" : "none",
                   }}
                 >
                   <a
@@ -659,6 +687,14 @@ function RecommendCard({
                     {logged ? "기록됨 ✓" : "이거 먹었어요 ✓"}
                   </button>
                 </div>
+                {rowEvalState && (
+                  <EvalUI
+                    state={rowEvalState}
+                    onEval={(value) => onEval(logKey, value)}
+                    onSkip={() => onEval(logKey, "skip")}
+                  />
+                )}
+                </div>
               );
             })}
           </div>
@@ -684,6 +720,78 @@ function BreaktimeBanner() {
       <span style={{ fontSize: 13, color: "#92400E", lineHeight: "20px" }}>
         브레이크타임 시간대입니다. 방문 전 영업 여부를 확인해 주세요.
       </span>
+    </div>
+  );
+}
+
+// ── EvalUI ───────────────────────────────────────────────────
+
+function EvalUI({
+  state, onEval, onSkip,
+}: {
+  state: EvalState;
+  onEval: (value: EvalValue) => void;
+  onSkip: () => void;
+}) {
+  if (state.status === "skipped") return null;
+
+  if (state.status !== "pending") {
+    return (
+      <div style={{
+        padding: "0 20px 13px",
+        fontSize: 13, color: "var(--text-mid)",
+      }}>
+        {EVAL_RESULT_TEXT[state.status]}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      padding: "0 20px 13px",
+      display: "flex", flexWrap: "wrap", gap: 8,
+    }}>
+      {EVAL_OPTIONS.map((opt) => (
+        <button
+          key={opt.value}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onEval(opt.value);
+          }}
+          style={{
+            padding: "6px 10px",
+            borderRadius: 999,
+            border: "1px solid var(--border)",
+            background: "#fff",
+            color: "var(--ink)",
+            fontSize: 12, fontWeight: 600,
+            cursor: "pointer",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {opt.label}
+        </button>
+      ))}
+      <button
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onSkip();
+        }}
+        style={{
+          padding: "6px 10px",
+          borderRadius: 999,
+          border: "none",
+          background: "none",
+          color: "var(--text-muted)",
+          fontSize: 12, fontWeight: 600,
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        나중에 평가할게요
+      </button>
     </div>
   );
 }
@@ -732,6 +840,7 @@ export default function Home() {
   const [locationReady, setLocationReady] = useState(false);
   const [loggedKeys, setLoggedKeys] = useState<Set<string>>(new Set());
   const [showToast, setShowToast] = useState(false);
+  const [evalState, setEvalState] = useState<Record<string, EvalState>>({});
 
   // 앱 최초 실행: localStorage 확인 → GPS 폴백
   useEffect(() => {
@@ -774,13 +883,17 @@ export default function Home() {
   }
 
   async function handleLogMeal(item: MenuItem, key: string) {
-    const { error } = await supabase.from("food_logs").insert({
-      menu_id: item.id,
-      menu_name: item.displayName ?? item.menuName,
-      eaten_at: new Date().toISOString(),
-      eval_simple: null,
-      user_id: null,
-    });
+    const { data, error } = await supabase
+      .from("food_logs")
+      .insert({
+        menu_id: item.id,
+        menu_name: item.displayName ?? item.menuName,
+        eaten_at: new Date().toISOString(),
+        eval_simple: null,
+        user_id: null,
+      })
+      .select("id")
+      .single();
 
     if (error) {
       console.error("[Supabase] food_logs 저장 실패:", error);
@@ -788,8 +901,31 @@ export default function Home() {
     }
 
     setLoggedKeys((prev) => new Set(prev).add(key));
+    setEvalState((prev) => ({ ...prev, [key]: { recordId: data.id, status: "pending" } }));
     setShowToast(true);
     setTimeout(() => setShowToast(false), 2000);
+  }
+
+  async function handleEval(key: string, value: EvalValue | "skip") {
+    const current = evalState[key];
+    if (!current) return;
+
+    if (value === "skip") {
+      setEvalState((prev) => ({ ...prev, [key]: { ...current, status: "skipped" } }));
+      return;
+    }
+
+    const { error } = await supabase
+      .from("food_logs")
+      .update({ eval_simple: value })
+      .eq("id", current.recordId);
+
+    if (error) {
+      console.error("[Supabase] eval_simple 업데이트 실패:", error);
+      return;
+    }
+
+    setEvalState((prev) => ({ ...prev, [key]: { ...current, status: value } }));
   }
 
   function renderCardList() {
@@ -822,6 +958,8 @@ export default function Home() {
             onToggle={() => setExpanded(expanded === i ? null : i)}
             loggedKeys={loggedKeys}
             onLogMeal={handleLogMeal}
+            evalState={evalState}
+            onEval={handleEval}
           />
         ))}
       </div>
