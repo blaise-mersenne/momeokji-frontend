@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 // ── Location Types & Constants ────────────────────────────────
@@ -299,12 +300,27 @@ function GlobalHeader() {
       }}>
         뭐먹지
       </span>
-      <div style={{
-        width: 32, height: 32, borderRadius: "50%",
-        background: "var(--bg-2)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
-        <IconUser />
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <Link
+          href="/history"
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            background: "var(--bg-2)", borderRadius: 999,
+            padding: "7px 12px",
+            fontSize: 13, fontWeight: 600,
+            color: "var(--ink)",
+            textDecoration: "none",
+          }}
+        >
+          📋 식사 기록 보기
+        </Link>
+        <div style={{
+          width: 32, height: 32, borderRadius: "50%",
+          background: "var(--bg-2)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <IconUser />
+        </div>
       </div>
     </header>
   );
