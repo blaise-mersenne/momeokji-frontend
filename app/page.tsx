@@ -551,11 +551,13 @@ function ErrorState({ message }: { message: string }) {
 // ── RecommendCard ─────────────────────────────────────────────
 
 function RecommendCard({
-  item, expanded, onToggle,
+  item, expanded, onToggle, loggedKeys, onLogMeal,
 }: {
   item: MenuItem;
   expanded: boolean;
   onToggle: () => void;
+  loggedKeys: Set<string>;
+  onLogMeal: (item: MenuItem, key: string) => void;
 }) {
   return (
     <div style={{
@@ -582,50 +584,83 @@ function RecommendCard({
         <>
           <div style={{ height: 1, background: "var(--border)" }} />
           <div>
-            {item.restaurants.map((r, i) => (
-              <a
-                key={i}
-                href={`https://map.naver.com/p/search/${encodeURIComponent(r.restaurantName)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "13px 20px",
-                  gap: 12,
-                  textDecoration: "none",
-                  borderBottom: i < item.restaurants.length - 1 ? "1px solid var(--border)" : "none",
-                  cursor: "pointer",
-                }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 14, fontWeight: 600, color: "var(--ink)",
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    {r.restaurantName}
-                  </div>
-                  <div style={{
-                    fontSize: 12, color: "var(--text-muted)", marginTop: 2,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    {r.menuName}
-                  </div>
+            {item.restaurants.map((r, i) => {
+              const logKey = `${item.id}_${i}`;
+              const logged = loggedKeys.has(logKey);
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "13px 20px",
+                    gap: 12,
+                    borderBottom: i < item.restaurants.length - 1 ? "1px solid var(--border)" : "none",
+                  }}
+                >
+                  <a
+                    href={`https://map.naver.com/p/search/${encodeURIComponent(r.restaurantName)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      flex: 1, minWidth: 0,
+                      display: "flex", alignItems: "center", gap: 12,
+                      textDecoration: "none",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 14, fontWeight: 600, color: "var(--ink)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {r.restaurantName}
+                      </div>
+                      <div style={{
+                        fontSize: 12, color: "var(--text-muted)", marginTop: 2,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {r.menuName}
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: 14, fontWeight: 600, color: "var(--ink)",
+                      whiteSpace: "nowrap", flexShrink: 0,
+                    }}>
+                      {Math.round(r.price).toLocaleString('ko-KR')}원
+                    </div>
+                    <div style={{
+                      fontSize: 12, color: "var(--text-mid)",
+                      whiteSpace: "nowrap", flexShrink: 0, minWidth: 52, textAlign: "right",
+                    }}>
+                      {r.distanceKm}km
+                    </div>
+                  </a>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onLogMeal(item, logKey);
+                    }}
+                    disabled={logged}
+                    style={{
+                      flexShrink: 0,
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: "1px solid",
+                      borderColor: logged ? "var(--border)" : "var(--orange-hot)",
+                      background: logged ? "var(--bg-2)" : "#fff",
+                      color: logged ? "var(--text-muted)" : "var(--orange-hot)",
+                      fontSize: 12, fontWeight: 700,
+                      cursor: logged ? "default" : "pointer",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {logged ? "기록됨 ✓" : "이거 먹었어요 ✓"}
+                  </button>
                 </div>
-                <div style={{
-                  fontSize: 14, fontWeight: 600, color: "var(--ink)",
-                  whiteSpace: "nowrap", flexShrink: 0,
-                }}>
-                  {Math.round(r.price).toLocaleString('ko-KR')}원
-                </div>
-                <div style={{
-                  fontSize: 12, color: "var(--text-mid)",
-                  whiteSpace: "nowrap", flexShrink: 0, minWidth: 52, textAlign: "right",
-                }}>
-                  {r.distanceKm}km
-                </div>
-              </a>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -649,6 +684,22 @@ function BreaktimeBanner() {
       <span style={{ fontSize: 13, color: "#92400E", lineHeight: "20px" }}>
         브레이크타임 시간대입니다. 방문 전 영업 여부를 확인해 주세요.
       </span>
+    </div>
+  );
+}
+
+// ── Toast ────────────────────────────────────────────────────
+
+function Toast({ text }: { text: string }) {
+  return (
+    <div style={{
+      position: "absolute", bottom: 96, left: "50%", transform: "translateX(-50%)",
+      background: "rgba(0,0,0,0.8)", color: "#fff",
+      fontSize: 14, fontWeight: 600,
+      padding: "10px 20px", borderRadius: 999,
+      whiteSpace: "nowrap", zIndex: 200,
+    }}>
+      {text}
     </div>
   );
 }
@@ -679,6 +730,8 @@ export default function Home() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationId>(DEFAULT_LOCATION);
   const [locationReady, setLocationReady] = useState(false);
+  const [loggedKeys, setLoggedKeys] = useState<Set<string>>(new Set());
+  const [showToast, setShowToast] = useState(false);
 
   // 앱 최초 실행: localStorage 확인 → GPS 폴백
   useEffect(() => {
@@ -720,6 +773,25 @@ export default function Home() {
     setLocation(id);
   }
 
+  async function handleLogMeal(item: MenuItem, key: string) {
+    const { error } = await supabase.from("food_logs").insert({
+      menu_id: item.id,
+      menu_name: item.displayName ?? item.menuName,
+      eaten_at: new Date().toISOString(),
+      eval_simple: null,
+      user_id: null,
+    });
+
+    if (error) {
+      console.error("[Supabase] food_logs 저장 실패:", error);
+      return;
+    }
+
+    setLoggedKeys((prev) => new Set(prev).add(key));
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2000);
+  }
+
   function renderCardList() {
     if (!locationReady) {
       return <GpsLoadingState />;
@@ -748,6 +820,8 @@ export default function Home() {
             item={item}
             expanded={expanded === i}
             onToggle={() => setExpanded(expanded === i ? null : i)}
+            loggedKeys={loggedKeys}
+            onLogMeal={handleLogMeal}
           />
         ))}
       </div>
@@ -786,6 +860,7 @@ export default function Home() {
         </div>
 
         <FAB />
+        {showToast && <Toast text="기록되었어요! 🎉" />}
       </div>
     </div>
   );
