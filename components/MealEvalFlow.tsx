@@ -23,12 +23,6 @@ const EVAL_OPTIONS: { value: EvalValue; label: string }[] = [
   { value: "good", label: "완전 내 스타일 😍" },
 ];
 
-const EVAL_RESULT_TEXT: Record<EvalValue, string> = {
-  bad: "내 입맛 아님으로 기록했어요 😞",
-  okay: "그냥저냥으로 기록했어요 😐",
-  good: "완전 내 스타일로 기록했어요 😍",
-};
-
 interface SliderField {
   key: keyof DetailSliders;
   label: string;
@@ -95,13 +89,13 @@ export default function MealEvalFlow({
   if (simpleValue === null) {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ fontSize: 13, color: "var(--text-mid)" }}>먹었어요 ✓</div>
+        <div style={loggedBadgeStyle}>먹었어요 ✓</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           {EVAL_OPTIONS.map((opt) => (
             <button
               key={opt.value}
               onClick={() => handleSelectSimple(opt.value)}
-              style={evalButtonStyle}
+              style={evalButtonStyle(false)}
             >
               {opt.label}
             </button>
@@ -114,8 +108,17 @@ export default function MealEvalFlow({
   // 단계 3, 4: 간단 평가 완료
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ fontSize: 13, color: "var(--text-mid)" }}>
-        {EVAL_RESULT_TEXT[simpleValue]}
+      <div style={loggedBadgeStyle}>먹었어요 ✓</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {EVAL_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => handleSelectSimple(opt.value)}
+            style={evalButtonStyle(opt.value === simpleValue)}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {detail ? (
@@ -177,11 +180,21 @@ export default function MealEvalFlow({
   );
 }
 
-const evalButtonStyle: CSSProperties = {
-  padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)",
-  background: "#fff", color: "var(--ink)",
-  fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+const loggedBadgeStyle: CSSProperties = {
+  alignSelf: "flex-start", padding: "6px 10px", borderRadius: 999,
+  border: "1px solid var(--border)", background: "var(--bg-2)",
+  color: "var(--text-muted)", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap",
 };
+
+function evalButtonStyle(selected: boolean): CSSProperties {
+  return {
+    padding: "6px 10px", borderRadius: 999,
+    border: selected ? "1px solid var(--orange-hot)" : "1px solid var(--border)",
+    background: selected ? "var(--orange-hot)" : "#fff",
+    color: selected ? "#fff" : "var(--ink)",
+    fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap",
+  };
+}
 
 const skipTextButtonStyle: CSSProperties = {
   padding: "6px 10px", borderRadius: 999, border: "none",
