@@ -47,21 +47,18 @@ interface MealEvalFlowProps {
   recordId: string;
   initialEvalSimple?: EvalValue | null;
   initialDetail?: DetailSliders | null;
-  startGated?: boolean;
   onToast?: (text: string) => void;
 }
 
 export default function MealEvalFlow({
-  recordId, initialEvalSimple = null, initialDetail = null, startGated = false, onToast,
+  recordId, initialEvalSimple = null, initialDetail = null, onToast,
 }: MealEvalFlowProps) {
-  // 단계 1: simpleValue === null → 간단 평가 진행 전
-  // 단계 2: simpleValue 있음 + detail === null → 상세 평가 진행 전 (언제든 가능)
-  // 단계 3: simpleValue 있음 + detail 있음 → 평가 완료
+  // 단계 2: simpleValue === null → 먹음 기록 완료, 간단 평가 미완료 (간단 평가 버튼 상시 노출)
+  // 단계 3: simpleValue 있음 + detail === null → 상세 평가 진행 전 (언제든 가능)
+  // 단계 4: simpleValue 있음 + detail 있음 → 평가 완료
   const [simpleValue, setSimpleValue] = useState<EvalValue | null>(initialEvalSimple);
   const [detail, setDetail] = useState<DetailSliders | null>(initialDetail);
   const [sliders, setSliders] = useState<DetailSliders>(initialDetail ?? DEFAULT_SLIDERS);
-  const [simpleGateOpen, setSimpleGateOpen] = useState(!startGated);
-  const [simpleSkipped, setSimpleSkipped] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
 
   async function handleSelectSimple(value: EvalValue) {
@@ -94,37 +91,27 @@ export default function MealEvalFlow({
     onToast?.("상세 평가가 저장되었어요!");
   }
 
-  // 단계 1: 간단 평가 전
+  // 단계 2: 먹음 기록 완료, 간단 평가 미완료
   if (simpleValue === null) {
-    if (simpleSkipped) return null;
-
-    if (!simpleGateOpen) {
-      return (
-        <button onClick={() => setSimpleGateOpen(true)} style={gateButtonStyle}>
-          평가하기
-        </button>
-      );
-    }
-
     return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {EVAL_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => handleSelectSimple(opt.value)}
-            style={evalButtonStyle}
-          >
-            {opt.label}
-          </button>
-        ))}
-        <button onClick={() => setSimpleSkipped(true)} style={skipTextButtonStyle}>
-          나중에 평가할게요
-        </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ fontSize: 13, color: "var(--text-mid)" }}>먹었어요 ✓</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {EVAL_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => handleSelectSimple(opt.value)}
+              style={evalButtonStyle}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
 
-  // 단계 2, 3: 간단 평가 완료
+  // 단계 3, 4: 간단 평가 완료
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ fontSize: 13, color: "var(--text-mid)" }}>
@@ -189,12 +176,6 @@ export default function MealEvalFlow({
     </div>
   );
 }
-
-const gateButtonStyle: CSSProperties = {
-  padding: "6px 10px", borderRadius: 999, border: "1px solid var(--orange-hot)",
-  background: "#fff", color: "var(--orange-hot)",
-  fontSize: 12, fontWeight: 700, cursor: "pointer",
-};
 
 const evalButtonStyle: CSSProperties = {
   padding: "6px 10px", borderRadius: 999, border: "1px solid var(--border)",

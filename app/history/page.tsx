@@ -66,7 +66,6 @@ function HistoryItem({ log, onToast }: { log: FoodLog; onToast: (text: string) =
         recordId={log.id}
         initialEvalSimple={log.eval_simple}
         initialDetail={initialDetail}
-        startGated
         onToast={onToast}
       />
     </div>
