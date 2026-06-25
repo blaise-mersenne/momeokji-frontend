@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
-import MealEvalFlow, { type EvalValue } from "@/components/MealEvalFlow";
+import MealEvalFlow, { type EvalValue, type DetailSliders } from "@/components/MealEvalFlow";
 import Toast from "@/components/Toast";
 import { useToast } from "@/components/useToast";
 
@@ -12,13 +12,11 @@ interface FoodLog {
   menu_name: string;
   eaten_at: string;
   eval_simple: EvalValue | null;
+  eval_spicy: number | null;
+  eval_salty: number | null;
+  eval_sweet: number | null;
+  eval_greasy: number | null;
 }
-
-const EVAL_LABELS: Record<string, string> = {
-  good: "완전 내 스타일 😍",
-  okay: "그냥저냥 😐",
-  bad: "내 입맛 아님 😞",
-};
 
 function formatEatenAt(iso: string): string {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -41,6 +39,16 @@ function IconBack() {
 }
 
 function HistoryItem({ log, onToast }: { log: FoodLog; onToast: (text: string) => void }) {
+  const initialDetail: DetailSliders | null =
+    log.eval_spicy !== null && log.eval_salty !== null && log.eval_sweet !== null && log.eval_greasy !== null
+      ? {
+          eval_spicy: log.eval_spicy,
+          eval_salty: log.eval_salty,
+          eval_sweet: log.eval_sweet,
+          eval_greasy: log.eval_greasy,
+        }
+      : null;
+
   return (
     <div style={{
       borderRadius: 16, background: "#fff",
@@ -54,13 +62,13 @@ function HistoryItem({ log, onToast }: { log: FoodLog; onToast: (text: string) =
       <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
         {formatEatenAt(log.eaten_at)}
       </div>
-      {log.eval_simple ? (
-        <div style={{ fontSize: 13, color: "var(--text-mid)" }}>
-          {EVAL_LABELS[log.eval_simple] ?? "평가 없음"}
-        </div>
-      ) : (
-        <MealEvalFlow recordId={log.id} startGated onToast={onToast} />
-      )}
+      <MealEvalFlow
+        recordId={log.id}
+        initialEvalSimple={log.eval_simple}
+        initialDetail={initialDetail}
+        startGated
+        onToast={onToast}
+      />
     </div>
   );
 }
@@ -75,7 +83,7 @@ export default function HistoryPage() {
     async function load() {
       const { data, error } = await supabase
         .from("food_logs")
-        .select("id, menu_name, eaten_at, eval_simple")
+        .select("id, menu_name, eaten_at, eval_simple, eval_spicy, eval_salty, eval_sweet, eval_greasy")
         .order("eaten_at", { ascending: false });
 
       if (error) {
