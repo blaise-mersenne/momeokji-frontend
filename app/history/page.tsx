@@ -3,12 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import MealEvalFlow, { type EvalValue } from "@/components/MealEvalFlow";
+import Toast from "@/components/Toast";
+import { useToast } from "@/components/useToast";
 
 interface FoodLog {
   id: string;
   menu_name: string;
   eaten_at: string;
-  eval_simple: string | null;
+  eval_simple: EvalValue | null;
 }
 
 const EVAL_LABELS: Record<string, string> = {
@@ -37,7 +40,7 @@ function IconBack() {
   );
 }
 
-function HistoryItem({ log }: { log: FoodLog }) {
+function HistoryItem({ log, onToast }: { log: FoodLog; onToast: (text: string) => void }) {
   return (
     <div style={{
       borderRadius: 16, background: "#fff",
@@ -51,9 +54,13 @@ function HistoryItem({ log }: { log: FoodLog }) {
       <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
         {formatEatenAt(log.eaten_at)}
       </div>
-      <div style={{ fontSize: 13, color: "var(--text-mid)" }}>
-        {log.eval_simple ? EVAL_LABELS[log.eval_simple] ?? "평가 없음" : "평가 없음"}
-      </div>
+      {log.eval_simple ? (
+        <div style={{ fontSize: 13, color: "var(--text-mid)" }}>
+          {EVAL_LABELS[log.eval_simple] ?? "평가 없음"}
+        </div>
+      ) : (
+        <MealEvalFlow recordId={log.id} startGated onToast={onToast} />
+      )}
     </div>
   );
 }
@@ -62,6 +69,7 @@ export default function HistoryPage() {
   const [logs, setLogs] = useState<FoodLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const { toastText, showToast } = useToast();
 
   useEffect(() => {
     async function load() {
@@ -107,7 +115,7 @@ export default function HistoryPage() {
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         {logs.map((log) => (
-          <HistoryItem key={log.id} log={log} />
+          <HistoryItem key={log.id} log={log} onToast={showToast} />
         ))}
       </div>
     );
@@ -118,6 +126,7 @@ export default function HistoryPage() {
       <div style={{
         width: "100%", maxWidth: 390,
         background: "#fff",
+        position: "relative",
         minHeight: "100vh",
         display: "flex", flexDirection: "column",
       }}>
@@ -138,6 +147,8 @@ export default function HistoryPage() {
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
           {renderList()}
         </div>
+
+        {toastText && <Toast text={toastText} />}
       </div>
     </div>
   );

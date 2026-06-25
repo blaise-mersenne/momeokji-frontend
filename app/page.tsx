@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import MealEvalFlow from "@/components/MealEvalFlow";
+import Toast from "@/components/Toast";
+import { useToast } from "@/components/useToast";
 
 // ── Location Types & Constants ────────────────────────────────
 
@@ -94,27 +97,6 @@ interface MenuItemWithGenre extends MenuItem {
   genre: string;
   mealTime: string;
 }
-
-// ── 평가(eval_simple) 타입 ─────────────────────────────────────
-
-type EvalValue = "bad" | "okay" | "good";
-
-interface EvalState {
-  recordId: string;
-  status: "pending" | EvalValue | "skipped";
-}
-
-const EVAL_OPTIONS: { value: EvalValue; label: string }[] = [
-  { value: "bad", label: "내 입맛 아님 😞" },
-  { value: "okay", label: "그냥저냥 😐" },
-  { value: "good", label: "완전 내 스타일 😍" },
-];
-
-const EVAL_RESULT_TEXT: Record<EvalValue, string> = {
-  bad: "내 입맛 아님으로 기록했어요 😞",
-  okay: "그냥저냥으로 기록했어요 😐",
-  good: "완전 내 스타일로 기록했어요 😍",
-};
 
 // ── 시간대 유틸 ──────────────────────────────────────────────
 
@@ -588,15 +570,15 @@ function ErrorState({ message }: { message: string }) {
 // ── RecommendCard ─────────────────────────────────────────────
 
 function RecommendCard({
-  item, expanded, onToggle, loggedKeys, onLogMeal, evalState, onEval,
+  item, expanded, onToggle, loggedKeys, onLogMeal, recordIds, onToast,
 }: {
   item: MenuItem;
   expanded: boolean;
   onToggle: () => void;
   loggedKeys: Set<string>;
   onLogMeal: (item: MenuItem, key: string) => void;
-  evalState: Record<string, EvalState>;
-  onEval: (key: string, value: EvalValue | "skip") => void;
+  recordIds: Record<string, string>;
+  onToast: (text: string) => void;
 }) {
   return (
     <div style={{
@@ -626,7 +608,7 @@ function RecommendCard({
             {item.restaurants.map((r, i) => {
               const logKey = `${item.id}_${i}`;
               const logged = loggedKeys.has(logKey);
-              const rowEvalState = evalState[logKey];
+              const recordId = recordIds[logKey];
               return (
                 <div
                   key={i}
@@ -703,12 +685,10 @@ function RecommendCard({
                     {logged ? "기록됨 ✓" : "이거 먹었어요 ✓"}
                   </button>
                 </div>
-                {rowEvalState && (
-                  <EvalUI
-                    state={rowEvalState}
-                    onEval={(value) => onEval(logKey, value)}
-                    onSkip={() => onEval(logKey, "skip")}
-                  />
+                {recordId && (
+                  <div style={{ padding: "0 20px 13px" }}>
+                    <MealEvalFlow recordId={recordId} onToast={onToast} />
+                  </div>
                 )}
                 </div>
               );
@@ -740,94 +720,6 @@ function BreaktimeBanner() {
   );
 }
 
-// ── EvalUI ───────────────────────────────────────────────────
-
-function EvalUI({
-  state, onEval, onSkip,
-}: {
-  state: EvalState;
-  onEval: (value: EvalValue) => void;
-  onSkip: () => void;
-}) {
-  if (state.status === "skipped") return null;
-
-  if (state.status !== "pending") {
-    return (
-      <div style={{
-        padding: "0 20px 13px",
-        fontSize: 13, color: "var(--text-mid)",
-      }}>
-        {EVAL_RESULT_TEXT[state.status]}
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      padding: "0 20px 13px",
-      display: "flex", flexWrap: "wrap", gap: 8,
-    }}>
-      {EVAL_OPTIONS.map((opt) => (
-        <button
-          key={opt.value}
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onEval(opt.value);
-          }}
-          style={{
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: "1px solid var(--border)",
-            background: "#fff",
-            color: "var(--ink)",
-            fontSize: 12, fontWeight: 600,
-            cursor: "pointer",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {opt.label}
-        </button>
-      ))}
-      <button
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onSkip();
-        }}
-        style={{
-          padding: "6px 10px",
-          borderRadius: 999,
-          border: "none",
-          background: "none",
-          color: "var(--text-muted)",
-          fontSize: 12, fontWeight: 600,
-          cursor: "pointer",
-          whiteSpace: "nowrap",
-        }}
-      >
-        나중에 평가할게요
-      </button>
-    </div>
-  );
-}
-
-// ── Toast ────────────────────────────────────────────────────
-
-function Toast({ text }: { text: string }) {
-  return (
-    <div style={{
-      position: "absolute", bottom: 96, left: "50%", transform: "translateX(-50%)",
-      background: "rgba(0,0,0,0.8)", color: "#fff",
-      fontSize: 14, fontWeight: 600,
-      padding: "10px 20px", borderRadius: 999,
-      whiteSpace: "nowrap", zIndex: 200,
-    }}>
-      {text}
-    </div>
-  );
-}
-
 // ── FAB ──────────────────────────────────────────────────────
 
 function FAB() {
@@ -855,8 +747,8 @@ export default function Home() {
   const [location, setLocation] = useState<LocationId>(DEFAULT_LOCATION);
   const [locationReady, setLocationReady] = useState(false);
   const [loggedKeys, setLoggedKeys] = useState<Set<string>>(new Set());
-  const [showToast, setShowToast] = useState(false);
-  const [evalState, setEvalState] = useState<Record<string, EvalState>>({});
+  const [recordIds, setRecordIds] = useState<Record<string, string>>({});
+  const { toastText, showToast } = useToast();
 
   // 앱 최초 실행: localStorage 확인 → GPS 폴백
   useEffect(() => {
@@ -917,31 +809,8 @@ export default function Home() {
     }
 
     setLoggedKeys((prev) => new Set(prev).add(key));
-    setEvalState((prev) => ({ ...prev, [key]: { recordId: data.id, status: "pending" } }));
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 2000);
-  }
-
-  async function handleEval(key: string, value: EvalValue | "skip") {
-    const current = evalState[key];
-    if (!current) return;
-
-    if (value === "skip") {
-      setEvalState((prev) => ({ ...prev, [key]: { ...current, status: "skipped" } }));
-      return;
-    }
-
-    const { error } = await supabase
-      .from("food_logs")
-      .update({ eval_simple: value })
-      .eq("id", current.recordId);
-
-    if (error) {
-      console.error("[Supabase] eval_simple 업데이트 실패:", error);
-      return;
-    }
-
-    setEvalState((prev) => ({ ...prev, [key]: { ...current, status: value } }));
+    setRecordIds((prev) => ({ ...prev, [key]: data.id }));
+    showToast("기록되었어요! 🎉");
   }
 
   function renderCardList() {
@@ -974,8 +843,8 @@ export default function Home() {
             onToggle={() => setExpanded(expanded === i ? null : i)}
             loggedKeys={loggedKeys}
             onLogMeal={handleLogMeal}
-            evalState={evalState}
-            onEval={handleEval}
+            recordIds={recordIds}
+            onToast={showToast}
           />
         ))}
       </div>
@@ -1014,7 +883,7 @@ export default function Home() {
         </div>
 
         <FAB />
-        {showToast && <Toast text="기록되었어요! 🎉" />}
+        {toastText && <Toast text={toastText} />}
       </div>
     </div>
   );
